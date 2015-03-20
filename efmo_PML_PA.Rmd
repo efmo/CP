@@ -80,16 +80,116 @@ fitControl <- trainControl(
     repeats = 5)
 ```
 
-I decided to train four different models. Each was a combination of using or not using participant names and using or not using principal component analysis. I was curious to see what the speed and accuracy impact would be for each of these variations and wanted to get a sense for which transformations were helpful and which were not.
+I decided to train four different models. Each was a combination of using or not using participant names and using or not using principal component analysis. I was curious to see what the speed and accuracy impact would be for each of these variations and wanted to get a sense for which transformations were helpful and which were not. I used a simple time difference benchmark to get a rough idea of runtime.
+The suffix NN or WN denotes 'no username' and 'with username' respectively. The presence of a 'P' in the suffix indicates the model used PCA. As a side note, PCA reduced the variable count from 48 to 20 using the default variance threshold of 0.95.
 
 ```{r}
-fitControl
+#train a non-PCA model without username cols
+trainNN <- train5[,2:48]
+tmp <- Sys.time()
+modFitNN <- train(classe~., data = trainNN[tmpTrain,], method = "rf", trControl = fitControl)
+tdifNN <- Sys.time() - tmp
+cmNN <- confusionMatrix(trainNN$classe[-tmpTrain], predict(modFitNN,trainNN[-tmpTrain,]))
+predNN <- predict(modFitNN,test5[,2:48])
+
+#train a non-PCA model with username cols
+dmyNames <- dummyVars("~ user_name", data = train5)
+trsf <- data.frame(predict(dmyNames,train5))
+train6 <- cbind(trsf, train5[,2:48])
+dmyNames2 <- dummyVars("~ user_name", data = test5)
+trsf2 <- data.frame(predict(dmyNames2,test5))
+test6 <- cbind(trsf2, test5[,2:48])
+
+tmp <- Sys.time()
+modFitWN <- train(classe~., data = train6[tmpTrain,], method = "rf", trControl = fitControl)
+tdifWN <- Sys.time() - tmp
+cmWN <- confusionMatrix(train6$classe[-tmpTrain], predict(modFitWN,train6[-tmpTrain,]))
+predWN <- predict(modFitWN,test6)
+
+#train a PCA model without username cols
+ppNN <- preProcess(train5[tmpTrain,2:47],method="pca")
+trainPNN <- predict(ppNN,train5[tmpTrain,2:47])
+trtestPNN <- predict(ppNN,train5[-tmpTrain,2:47])
+
+predTestPNN <- predict(ppNN,test5[,2:47])
+tmp <- Sys.time()
+modPNN <- train(train5$classe[tmpTrain]~., method = "rf", data = trainPNN, trControl = fitControl)
+tdifPNN <- Sys.time() - tmp
+cmPNN <- confusionMatrix(train5$classe[-tmpTrain],predict(modPNN,trtestPNN))
+predPNN <- predict(modPNN,predTestPNN)
+
+#train a PCA model with username cols
+ppWN <- preProcess(train6[tmpTrain,-53],method="pca")
+trainPWN <- predict(ppWN,train6[tmpTrain,-53])
+trtestPWN <- predict(ppWN,train6[-tmpTrain,-53])
+
+predTestPWN <- predict(ppWN,test6[,-53])
+tmp <- Sys.time()
+modPWN <- train(train6$classe[tmpTrain] ~.,method = "rf", data = trainPWN, trControl = fitControl)
+tdifPWN <- Sys.time() - tmp
+cmPWN <- confusionMatrix(train6$classe[-tmpTrain],predict(modPWN,trtestPWN))
+predPWN <- predict(modPWN, predTestPWN)
 ```
+
+##Out-of-sample Error and Cross-Validation
+
+A comparison of model accuracy using the 25% test set shows that for non-PCA models the runtime increased approximately 200%.
 
 ```{r}
-
+tdifNN
+tdifPNN
+tdifWN
+tdifPWN
 ```
+
+The non-PCA model with user names was about 5% faster than the non-PCA model without usernames. This could be due to variance in converging time within the random forest model. It's also possible that the user name data helped the random forests converge a little faster. 
+
+Both PCA models ran in about 20 minutes. An interesting side note is that the PCA model with user names was faster by a few seconds. After examining the two PCA transformed training sets I realized they both had 20 principal components. This combined with the accuracy results suggests to me that user names provide much less useful information than I originally thought.
+
+Accuracy and error estimates were reported using `confusionMatrix()`.
+
+```{r}
+cmNN$overall
+cmPNN$overall
+cmWN$overall
+cmPWN$overall
+```
+
+The non-PCA with user names resulted in an accuracy of 99%, the highest of all four models. This is no surprise since this model contained more data than any of the others. The PCA models both reported an accuracy of about 96%, roughly 3 percentage points below their counterpart non-PCA models.
+
+
+```{r}
+allPred = cbind(predNN,predPNN,predWN,predPWN)
+allPred
+```
+
+The non-PCA models generated equivalent predictions. The PCA model with user names differed from the non-PCA models' prediction for test element 11. The PCA model without user names differed on element 11 in the same way and additionally differed on element 3.
 
 ##Final Model and Performance Analysis
 
+I decided to submit the predictions from the non-PCA models. I would have preferred to see the PCA models agree with the non-PCA models and feel more confident in my ability to speed up runtime with PCA, but there was a little too much difference between non-PCA and PCA models. As it turns out I submitted the non-PCA results first and had all correct answers. 
 
+```{r, eval=FALSE}
+pml_write_files = function(x){
+    n = length(x)
+    for(i in 1:n){
+        filename = paste0("predictions/problem_id_",i,".txt")
+        write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+    }
+}
+
+pml_write_files(predNN)
+```
+
+
+## Conclusions and Feedback
+
+Final model performance using actual test values as a benchmark:
+100% - non-PCA with user names
+100% - non-PCA without user names
+95% - PCA with user names
+90% - PCA without user names
+
+This accuracy order also matches the models ordered by the amount of data they were trained with, greatest to least, so these results appear to make sense.
+
+I'm happy with my results and am eager to peer review other methods. Please leave your feedback and critique of my model! I would love to know what the rest of the class thinks of my methods and how they could be improved. Thank you!  

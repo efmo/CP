@@ -106,101 +106,134 @@ fitControl &lt;- trainControl(
     method = &quot;repeatedcv&quot;,
     number = 5,
     repeats = 5)</code></pre>
-<p>I decided to train four different models. Each was a combination of using or not using participant names and using or not using principal component analysis. I was curious to see what the speed and accuracy impact would be for each of these variations and wanted to get a sense for which transformations were helpful and which were not.</p>
-<pre class="r"><code>fitControl</code></pre>
-<pre><code>## $method
-## [1] &quot;repeatedcv&quot;
-## 
-## $number
-## [1] 5
-## 
-## $repeats
-## [1] 5
-## 
-## $p
-## [1] 0.75
-## 
-## $initialWindow
-## NULL
-## 
-## $horizon
-## [1] 1
-## 
-## $fixedWindow
-## [1] TRUE
-## 
-## $verboseIter
-## [1] FALSE
-## 
-## $returnData
-## [1] TRUE
-## 
-## $returnResamp
-## [1] &quot;final&quot;
-## 
-## $savePredictions
-## [1] FALSE
-## 
-## $classProbs
-## [1] FALSE
-## 
-## $summaryFunction
-## function (data, lev = NULL, model = NULL) 
-## {
-##     if (is.character(data$obs)) 
-##         data$obs &lt;- factor(data$obs, levels = lev)
-##     postResample(data[, &quot;pred&quot;], data[, &quot;obs&quot;])
-## }
-## &lt;environment: namespace:caret&gt;
-## 
-## $selectionFunction
-## [1] &quot;best&quot;
-## 
-## $preProcOptions
-## $preProcOptions$thresh
-## [1] 0.95
-## 
-## $preProcOptions$ICAcomp
-## [1] 3
-## 
-## $preProcOptions$k
-## [1] 5
-## 
-## 
-## $index
-## NULL
-## 
-## $indexOut
-## NULL
-## 
-## $timingSamps
-## [1] 0
-## 
-## $predictionBounds
-## [1] FALSE FALSE
-## 
-## $seeds
-## [1] NA
-## 
-## $adaptive
-## $adaptive$min
-## [1] 5
-## 
-## $adaptive$alpha
-## [1] 0.05
-## 
-## $adaptive$method
-## [1] &quot;gls&quot;
-## 
-## $adaptive$complete
-## [1] TRUE
-## 
-## 
-## $allowParallel
-## [1] TRUE</code></pre>
+<p>I decided to train four different models. Each was a combination of using or not using participant names and using or not using principal component analysis. I was curious to see what the speed and accuracy impact would be for each of these variations and wanted to get a sense for which transformations were helpful and which were not. I used a simple time difference benchmark to get a rough idea of runtime. The suffix NN or WN denotes ‘no username’ and ‘with username’ respectively. The presence of a ‘P’ in the suffix indicates the model used PCA. As a side note, PCA reduced the variable count from 48 to 20 using the default variance threshold of 0.95.</p>
+<pre class="r"><code>#train a non-PCA model without username cols
+trainNN &lt;- train5[,2:48]
+tmp &lt;- Sys.time()
+modFitNN &lt;- train(classe~., data = trainNN[tmpTrain,], method = &quot;rf&quot;, trControl = fitControl)</code></pre>
+<pre><code>## Loading required package: randomForest
+## randomForest 4.6-10
+## Type rfNews() to see new features/changes/bug fixes.</code></pre>
+<pre class="r"><code>tdifNN &lt;- Sys.time() - tmp
+cmNN &lt;- confusionMatrix(trainNN$classe[-tmpTrain], predict(modFitNN,trainNN[-tmpTrain,]))
+predNN &lt;- predict(modFitNN,test5[,2:48])
+
+#train a non-PCA model with username cols
+dmyNames &lt;- dummyVars(&quot;~ user_name&quot;, data = train5)
+trsf &lt;- data.frame(predict(dmyNames,train5))
+train6 &lt;- cbind(trsf, train5[,2:48])
+dmyNames2 &lt;- dummyVars(&quot;~ user_name&quot;, data = test5)
+trsf2 &lt;- data.frame(predict(dmyNames2,test5))
+test6 &lt;- cbind(trsf2, test5[,2:48])
+
+tmp &lt;- Sys.time()
+modFitWN &lt;- train(classe~., data = train6[tmpTrain,], method = &quot;rf&quot;, trControl = fitControl)
+tdifWN &lt;- Sys.time() - tmp
+cmWN &lt;- confusionMatrix(train6$classe[-tmpTrain], predict(modFitWN,train6[-tmpTrain,]))
+predWN &lt;- predict(modFitWN,test6)
+
+#train a PCA model without username cols
+ppNN &lt;- preProcess(train5[tmpTrain,2:47],method=&quot;pca&quot;)
+trainPNN &lt;- predict(ppNN,train5[tmpTrain,2:47])
+trtestPNN &lt;- predict(ppNN,train5[-tmpTrain,2:47])
+
+predTestPNN &lt;- predict(ppNN,test5[,2:47])
+tmp &lt;- Sys.time()
+modPNN &lt;- train(train5$classe[tmpTrain]~., method = &quot;rf&quot;, data = trainPNN, trControl = fitControl)
+tdifPNN &lt;- Sys.time() - tmp
+cmPNN &lt;- confusionMatrix(train5$classe[-tmpTrain],predict(modPNN,trtestPNN))
+predPNN &lt;- predict(modPNN,predTestPNN)
+
+#train a PCA model with username cols
+ppWN &lt;- preProcess(train6[tmpTrain,-53],method=&quot;pca&quot;)
+trainPWN &lt;- predict(ppWN,train6[tmpTrain,-53])
+trtestPWN &lt;- predict(ppWN,train6[-tmpTrain,-53])
+
+predTestPWN &lt;- predict(ppWN,test6[,-53])
+tmp &lt;- Sys.time()
+modPWN &lt;- train(train6$classe[tmpTrain] ~.,method = &quot;rf&quot;, data = trainPWN, trControl = fitControl)
+tdifPWN &lt;- Sys.time() - tmp
+cmPWN &lt;- confusionMatrix(train6$classe[-tmpTrain],predict(modPWN,trtestPWN))
+predPWN &lt;- predict(modPWN, predTestPWN)</code></pre>
+</div>
+<div id="out-of-sample-error-and-cross-validation" class="section level2">
+<h2>Out-of-sample Error and Cross-Validation</h2>
+<p>A comparison of model accuracy using the 25% test set shows that for non-PCA models the runtime increased approximately 200%.</p>
+<pre class="r"><code>tdifNN</code></pre>
+<pre><code>## Time difference of 42.30048 mins</code></pre>
+<pre class="r"><code>tdifPNN</code></pre>
+<pre><code>## Time difference of 20.77997 mins</code></pre>
+<pre class="r"><code>tdifWN</code></pre>
+<pre><code>## Time difference of 40.50704 mins</code></pre>
+<pre class="r"><code>tdifPWN</code></pre>
+<pre><code>## Time difference of 20.5202 mins</code></pre>
+<p>The non-PCA model with user names was about 5% faster than the non-PCA model without usernames. This could be due to variance in converging time within the random forest model. It’s also possible that the user name data helped the random forests converge a little faster.</p>
+<p>Both PCA models ran in about 20 minutes. An interesting side note is that the PCA model with user names was faster by a few seconds. After examining the two PCA transformed training sets I realized they both had 20 principal components. This combined with the accuracy results suggests to me that user names provide much less useful information than I originally thought.</p>
+<p>Accuracy and error estimates were reported using <code>confusionMatrix()</code>.</p>
+<pre class="r"><code>cmNN$overall</code></pre>
+<pre><code>##       Accuracy          Kappa  AccuracyLower  AccuracyUpper   AccuracyNull 
+##      0.9885808      0.9855549      0.9851965      0.9913628      0.2854812 
+## AccuracyPValue  McnemarPValue 
+##      0.0000000            NaN</code></pre>
+<pre class="r"><code>cmPNN$overall</code></pre>
+<pre><code>##       Accuracy          Kappa  AccuracyLower  AccuracyUpper   AccuracyNull 
+##   9.634992e-01   9.538010e-01   9.578652e-01   9.685723e-01   2.903752e-01 
+## AccuracyPValue  McnemarPValue 
+##   0.000000e+00   9.219693e-07</code></pre>
+<pre class="r"><code>cmWN$overall</code></pre>
+<pre><code>##       Accuracy          Kappa  AccuracyLower  AccuracyUpper   AccuracyNull 
+##     0.99000816     0.98736035     0.98681154     0.99259909     0.28568515 
+## AccuracyPValue  McnemarPValue 
+##     0.00000000     0.04537681</code></pre>
+<pre class="r"><code>cmPWN$overall</code></pre>
+<pre><code>##       Accuracy          Kappa  AccuracyLower  AccuracyUpper   AccuracyNull 
+##   9.632953e-01   9.535477e-01   9.576474e-01   9.683826e-01   2.899674e-01 
+## AccuracyPValue  McnemarPValue 
+##   0.000000e+00   7.912819e-08</code></pre>
+<p>The non-PCA with user names resulted in an accuracy of 99%, the highest of all four models. This is no surprise since this model contained more data than any of the others. The PCA models both reported an accuracy of about 96%, roughly 3 percentage points below their counterpart non-PCA models.</p>
+<pre class="r"><code>allPred = cbind(predNN,predPNN,predWN,predPWN)
+allPred</code></pre>
+<pre><code>##       predNN predPNN predWN predPWN
+##  [1,]      2       2      2       2
+##  [2,]      1       1      1       1
+##  [3,]      2       3      2       2
+##  [4,]      1       1      1       1
+##  [5,]      1       1      1       1
+##  [6,]      5       5      5       5
+##  [7,]      4       4      4       4
+##  [8,]      2       2      2       2
+##  [9,]      1       1      1       1
+## [10,]      1       1      1       1
+## [11,]      2       1      2       1
+## [12,]      3       3      3       3
+## [13,]      2       2      2       2
+## [14,]      1       1      1       1
+## [15,]      5       5      5       5
+## [16,]      5       5      5       5
+## [17,]      1       1      1       1
+## [18,]      2       2      2       2
+## [19,]      2       2      2       2
+## [20,]      2       2      2       2</code></pre>
+<p>The non-PCA models generated equivalent predictions. The PCA model with user names differed from the non-PCA models’ prediction for test element 11. The PCA model without user names differed on element 11 in the same way and additionally differed on element 3.</p>
 </div>
 <div id="final-model-and-performance-analysis" class="section level2">
 <h2>Final Model and Performance Analysis</h2>
+<p>I decided to submit the predictions from the non-PCA models. I would have preferred to see the PCA models agree with the non-PCA models and feel more confident in my ability to speed up runtime with PCA, but there was a little too much difference between non-PCA and PCA models. As it turns out I submitted the non-PCA results first and had all correct answers.</p>
+<pre class="r"><code>pml_write_files = function(x){
+    n = length(x)
+    for(i in 1:n){
+        filename = paste0(&quot;predictions/problem_id_&quot;,i,&quot;.txt&quot;)
+        write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+    }
+}
+
+pml_write_files(predNN)</code></pre>
+</div>
+<div id="conclusions-and-feedback" class="section level2">
+<h2>Conclusions and Feedback</h2>
+<p>Final model performance using actual test values as a benchmark: 100% - non-PCA with user names 100% - non-PCA without user names 95% - PCA with user names 90% - PCA without user names</p>
+<p>This accuracy order also matches the models ordered by the amount of data they were trained with, greatest to least, so these results appear to make sense.</p>
+<p>I’m happy with my results and am eager to peer review other methods. Please leave your feedback and critique of my model! I would love to know what the rest of the class thinks of my methods and how they could be improved. Thank you!</p>
 </div>
 
 
