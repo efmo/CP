@@ -1,0 +1,95 @@
+---
+title: "Practical Machine Learning PA1"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache=TRUE)
+```
+
+This report describes a method that uses wearable sensor data to predict types of motion. Participants with little to no weightlifting experience were shown how to perform barbell lifts correctly and incorrectly in five different ways. The data comes from accelerometers attached to the belt, forearm, arm, and dumbell of the participants.
+
+The original experiment description and data can be found here: <http://groupware.les.inf.puc-rio.br/har>
+
+
+##Loading Data and First Look
+To begin, a training and testing dataset are loaded from csv files. The training set contains almost twenty thousand observations of 160 variables, one of which describes the type of barbell lift (identified as A, B, C, D, or E). The testing set contains twenty observations with an identical set of variables excluding the movement type. The test set is left unexamined until a final machine learning model is complete, but all data transformations made to the training set are applied to the test set.
+
+```{r}
+library(caret)
+train <- read.csv("pml-training.csv", header = TRUE)
+test <- read.csv("pml-testing.csv", header = TRUE)
+```
+
+##Preprocessing
+The goal of this stage was to reduce the number of variables in the training dataset in order to increase model training speed and accuracy and reduce noise. 
+Near-zero values are identified using the `nzv()` function from the caret package. This reduces the variable count from 160 to 100.
+
+```{r}
+nzvAll <- nzv(train)
+train2 <- train[,-nzvAll]
+test2 <- test[,-nzvAll]
+```
+
+Upon further investigation the dataset appears to contain large swaths of NA values. The number of NAs per column is so large that imputing data isn't a realistic option. These columns are identified and removed. This reduces the variable count from 100 to 59. Sadly, this suggests that a great deal of potentially useful sensor data was lost or corrupted.
+
+```{r}
+naCols <- colSums(is.na(train2))
+quantile(naCols) # a quick look at how many NAs per column there are overall
+train3 <- train2[,-which(naCols > 0)]
+test3 <- test2[,-which(naCols > 0)]
+```
+
+The next steps involve a closer look at the data breakdown by user. The call to `nzv()` identified near-zero variables across the dataset, but a closer look at the dataset user by user reveals that some users have holes in their individual datasets. To keep the entire model consistent, any variables that aren't statistically relevant (as decided by `nzv()`) across all participants are dropped. This reduces the variable count 6 more to 53.
+
+```{r}
+vecList <- unlist(lapply(split(train3, train3$user_name), nzv))
+nzvByUser <- sort(unique(vecList))
+nzvByUser <- nzvByUser[2:length(nzvByUser)]
+train4 <- train3[,-nzvByUser]
+test4 <- test3[,-nzvByUser]
+```
+
+The dataset includes time based variables like dates, timestamps, and time windows. There was no clear organization or description of these variables and I couldn't determine a strong correlation between them and other variables in the dataset. Furthermore, each of the twenty observations in the test dataset are to be treated independently, so without a better understanding of the time variables there isn't much lost by dropping them. This reduces the variable count to 48.
+
+```{r}
+train5 <- train4[,c(2,7:53)]
+test5 <- test4[,c(2,7:53)]
+```
+I considered removing the `train5$user_name` variable in order to keep the learning model blind to the user's identity and hopefully more accurate for new users. I ultimately decided to retain the participant's name for two reasons. First, the test set included user names, all of which existed in the training set. Second, after a bit of peeking around the variable relationships as broken down by user name, I decided that there was too much distinct correlation within each user's dataset that could be lost by eliminating the user name data. 
+The tight groupings of some example variable pairs in the plots below support this theory. The top row shows two variable pairs colored by user. The bottom row shows the same variable pairs of a single user (Charles) colored by movement type. There seemed to be enough distinct variability in the data according to user to justify including the user name.
+
+```{r}
+library(gridExtra)
+t5Charles <- train5[which(train5$user_name == "charles"),]
+plot1 <- ggplot(train5, aes(x=roll_belt, y=pitch_belt, color = user_name)) + geom_point()
+plot2 <- ggplot(train5, aes(x=accel_belt_x, y=accel_belt_z, color = user_name)) + geom_point()
+plot3 <- ggplot(t5Charles, aes(x=roll_belt, y=pitch_belt, color = classe)) + geom_point()
+plot4 <- ggplot(t5Charles, aes(x=accel_belt_x, y=accel_belt_z,  color = classe)) + geom_point()
+grid.arrange(plot1, plot2, plot3, plot4, ncol=2)
+```
+
+##Intuition and Model Choice
+
+I randomly assigned 75% of the training set for training and cross validation and the remaining 25% as a test set. The `trainControl` parameter for `train()` in the caret package is customized to perform 5-fold cross validation repeatedly within each iteration of training (see the documentation page <http://topepo.github.io/caret/training.html> for more details).
+```{r}
+tmpTrain <- createDataPartition(train5$classe, p = 0.75, list = FALSE)
+fitControl <- trainControl(
+    method = "repeatedcv",
+    number = 5,
+    repeats = 5)
+```
+
+I decided to train four different models. Each was a combination of using or not using participant names and using or not using principal component analysis. I was curious to see what the speed and accuracy impact would be for each of these variations and wanted to get a sense for which transformations were helpful and which were not.
+
+```{r}
+fitControl
+```
+
+```{r}
+
+```
+
+##Final Model and Performance Analysis
+
+

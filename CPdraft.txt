@@ -1,0 +1,121 @@
+Practical Machine Learning CP
+
+Preprocessing
+-removed nzv vars	100
+-removed cols with mostly NAs	59
+-removed cols with nzv per user	53
+-removed unnecessary vars X, timestamps, window	49/48 no username
+-PCA
+
+
+(separate training, cross-validation sets)
+
+pred1
+A A A A A E D B A A A C B A E E A B D B
+
+B A B A A E D B A A A C B A E E A B B B
+B A B A A E D B A A B C B A E E A B B B
+B A B A A E D B A A B C B A E E A B B B
+B A B A A E D B A A B C B A E E A B B B
+B A B A A E D B A A B C B A E E A B B B
+B A C A A E D B A A B C B A E E A B B B
+	^				^	
+
+rm(list=setdiff(ls(), c("train", "test")))
+
+fitControl <- trainControl(
+    method = "repeatedcv",
+    number = 5,
+    repeats = 5)
+
+nzvAll <- nzv(train)
+train2 <- train[,-nzvAll]
+test2 <- test[,-nzvAll]
+
+naCols <- colSums(is.na(train))
+quantile(naCols)
+train3 <- train2[,-which(naCols > 0)]
+test3 <- test2[,-which(naCols > 0)]
+
+vecList <- unlist(lapply(split(train3, train3$user_name), nzv))
+nzvByUser <- unique(vecList)
+
+train4 <- train3[,-nzvByUser]
+test4 <- test3[,-nzvByUser]
+train5 <- train4[,6:52]
+test5 <- test4[,6:52]
+
+
+modFitN1 <- train(classe~., data = train5, method = "gbm", verbose = FALSE, trControl = fitControl)
+confusionMatrix(train5$classe, predict(modFit,train5))
+predict(modFitN1,test5)
+
+modFitN2 <- train(classe~., data = tmpTrain, method = "rf", trControl = fitControl)
+confusionMatrix(train5$classe, predict(modFit,train5))
+predict(modFitN2,test5)
+
+
+
+
+train6 <- train4[,c(2,6:52)]
+test6 <- test4[,c(2,6:52)]
+
+
+modFitN3 <- train(classe~., data = train5, method = "gbm", verbose = FALSE, trControl = fitControl)
+confusionMatrix(train5$classe, predict(modFit,train5))
+predict(modFitN3,test5)
+
+modFitN4 <- train(classe~., data = tmpTrain, method = "rf", trControl = fitControl)
+confusionMatrix(train5$classe, predict(modFit,train5))
+predict(modFitN4,test5)
+
+
+~~~~~~~~~
+
+rm(list=setdiff(ls(), c("train", "test")))
+
+fitControl <- trainControl(
+    method = "repeatedcv",
+    number = 5,
+    repeats = 5)
+
+nzvAll <- nzv(train)
+train2 <- train[,-nzvAll]
+test2 <- test[,-nzvAll]
+
+naCols <- colSums(is.na(train2))
+quantile(naCols) # a quick look at how many NAs per column there are overall
+train3 <- train2[,-which(naCols > 0)]
+test3 <- test2[,-which(naCols > 0)]
+
+
+vecList <- unlist(lapply(split(train3, train3$user_name), nzv))
+nzvByUser <- sort(unique(vecList))
+nzvByUser <- nzvByUser[2:length(nzvByUser)]
+
+train4 <- train3[,-nzvByUser]
+test4 <- test3[,-nzvByUser]
+train5 <- train4[,6:53]
+test5 <- test4[,6:53]
+
+
+tmpTrain <- createDataPartition(train5$classe, p = 0.75, list = FALSE)
+
+#modFitN1 <- train(classe~., data = train5[tmpTrain,], method = "gbm", verbose = FALSE, trControl = fitControl)
+#confusionMatrix(train5[-tmpTrain,]$classe, predict(modFitN1,train5[-tmpTrain,]))
+#predict(modFitN1,test5)
+
+modFitN2 <- train(classe~., data = train5[tmpTrain,], method = "rf", trControl = fitControl)
+confusionMatrix(train5[-tmpTrain,]$classe, predict(modFitN2,train5[-tmpTrain,]))
+predict(modFitN2,test5)
+
+#train6 <- train4[,c(2,6:53)]
+#test6 <- test4[,c(2,6:53)]
+
+#modFitN3 <- train(classe~., data = train6[tmpTrain,], method = "gbm", verbose = FALSE, trControl = fitControl)
+#confusionMatrix(train6[-tmpTrain,]$classe, predict(modFitN3,train6[-tmpTrain,]))
+#predict(modFitN3,test6)
+
+#modFitN4 <- train(classe~., data = train6[tmpTrain,], method = "rf", trControl = fitControl)
+#confusionMatrix(train6[-tmpTrain,]$classe, predict(modFitN4,train6[-tmpTrain,]))
+#predict(modFitN4,test6)
